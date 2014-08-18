@@ -30,6 +30,7 @@ $VERSION     = v1.00;
                    decrypt_aes_128_ecb
                    encrypt_aes_128_cbc
                    decrypt_aes_128_cbc
+                   encrypt_aes_128_random_mode
                  );
 
 %EXPORT_TAGS = ( DEFAULT => [qw(&hex_string_to_int_array &my_xor)],
@@ -261,22 +262,26 @@ sub find_best_xor {
   return ($max_score, $best_xor, $best_message);
 }
 
+# Input: two array references containing 8-bit integers
+# Output: The hamming distance (the total number of bits that differ) between
+#         the two arrays.
 sub hamming_distance {
   my @array_ref = @_;
 
   my $total_distance = 0;
-  if (scalar @{$array_ref[0]} != scalar @{$array_ref[1]}) {
+  my @vals1 = @{$array_ref[0]};
+  my @vals2 = @{$array_ref[1]};
+
+  if (scalar @vals1 != scalar @vals2) {
     print {*STDERR} "Arrays must be equal length.\n";
     exit 1;
   }
 
-  my @vals1 = @{$array_ref[0]};
-  my @vals2 = @{$array_ref[1]};
   for (my $i = 0; $i < @vals1; $i++) {
-    my $x1 = $vals1[$i] ^ $vals2[$i];
-    while ($x1 > 0) {
-      $total_distance += ($x1 % 2);
-      $x1 >>= 1;
+    my $x = $vals1[$i] ^ $vals2[$i];
+    while ($x > 0) {
+      $total_distance += ($x % 2);
+      $x >>= 1;
     }
   }
 
@@ -417,7 +422,7 @@ sub pkcs_7_pad_block {
   return @return_block;
 }
 
-# Input: two array references. 1) the key, 2) the ctext. The arrays are the
+# Input: Two array references. 1) the key, 2) the ctext. The arrays are the
 #        normal "array of 8-bit integers".
 # Output: An array of 8-bit integers containing the decrypted plaintext.
 sub decrypt_aes_128_ecb {
@@ -426,9 +431,20 @@ sub decrypt_aes_128_ecb {
   my $cipher = Crypt::Rijndael->new($key, Crypt::Rijndael::MODE_ECB());
 
   my $ctext = int_array_to_string(@{$ctext_ref});
+  if (length($cipher) % length($key) != 0) {
+    croak 'Cipher/Plain text length must be an even multiple of key length.';
+  }
   my $plaintext = $cipher->decrypt($ctext);
 
   return string_to_int_array($plaintext);
+}
+
+# Input: Two array references: 1) the key, 2) the ptext. The arrays are the
+#        normal "array of 8-bit integers".
+# Output: An array of 8-bit integers containing the decrypted plaintext.
+sub encrypt_aes_128_ecb {
+  my ($key_ref, $ptext_ref) = @_;
+  return decrypt_aes_128_ecb($key_ref, $ptext_ref);
 }
 
 # Input: three array references. 1) the key, 2) the initialization vector,
@@ -522,6 +538,49 @@ sub decrypt_aes_128_cbc {
   }
 
   return @ptext;
+}
+
+# Input: None
+# Output: An array of 16 8-bit integers: a random 16-byte AES key.
+#         NB: This is *not* cryptographically secure.
+sub generate_random_aes_key {
+  my @aes_key = ();
+  for (0 .. 15) {
+    push @aes_key, int(rand(256));
+  }
+
+  return @aes_key;
+}
+
+# Input: An reference to an array of 8-bit integers -- the plaintext
+# Output: The input, encrypted with a random AES key, with a 50% chance of
+#         using CBC mode, and a 50% chance of using EBC mode. In addition, the
+#         plaintext will have 5-10 bytes (the amount will be random) appended
+#         to both the beginning and the end of the plaintext.
+sub encrypt_aes_128_random_mode {
+  my ($ptext_ref) = @_;
+  my @key = generate_random_aes_key();
+  my @ptext = ();
+  my @prefix = ();
+  my @suffix = ();
+  my $prefix_length = int(rand(6)) + 5;
+  my $suffix_length = int(rand(6)) + 5;
+  for (1 .. $prefix_length) {
+    push @prefix, int(rand(256));
+  }
+  for (1 .. $suffix_length) {
+    push @suffix, int(rand(256));
+  }
+  push @ptext, @prefix, @{$ptext_ref}, @suffix;
+  if (int(rand(2)) == 0) {
+    print "CHEATING: I chose ECB mode.\n";
+    return encrypt_aes_128_ecb(\@key, \@ptext);
+  }
+  else {
+    print "CHEATING: I chose CBC mode.\n";
+    my @init_vector = generate_random_aes_key();
+    return encrypt_aes_128_cbc(\@key, \@init_vector, \@ptext);
+  }
 }
 
 1;
