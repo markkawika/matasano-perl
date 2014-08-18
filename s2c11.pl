@@ -11,10 +11,11 @@ for (0 .. 47) {
 
 my @ctext = encrypt_aes_128_random_mode(\@ptext);
 
-my @block1 = @ctext[16 .. 23];
-my @block2 = @ctext[24 .. 31];
+my @block1 = @ctext[16 .. 31];
+my @block2 = @ctext[32 .. 47];
 
-if (hamming_distance(\@block1, \@block2) == 0) {
+my $hamming_dist = hamming_distance(\@block1, \@block2);
+if ($hamming_dist == 0) {
   print "This was encrypted using ECB.\n";
 }
 else {
