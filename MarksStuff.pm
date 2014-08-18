@@ -432,7 +432,7 @@ sub decrypt_aes_128_ecb {
   my $cipher = Crypt::Rijndael->new($key, Crypt::Rijndael::MODE_ECB());
 
   my $ctext = int_array_to_string(@{$ctext_ref});
-  if (length($cipher) % length($key) != 0) {
+  if (length($ctext) % length($key) != 0) {
     croak 'Cipher/Plain text length must be an even multiple of key length.';
   }
   my $plaintext = $cipher->decrypt($ctext);
@@ -445,7 +445,26 @@ sub decrypt_aes_128_ecb {
 # Output: An array of 8-bit integers containing the decrypted plaintext.
 sub encrypt_aes_128_ecb {
   my ($key_ref, $ptext_ref) = @_;
-  return decrypt_aes_128_ecb($key_ref, $ptext_ref);
+
+  my @ptext = @{$ptext_ref};
+  my @ctext = ();
+  my $key = int_array_to_string(@{$key_ref});
+  my $key_size = scalar @{$key_ref};
+  my $cipher = Crypt::Rijndael->new($key, Crypt::Rijndael::MODE_ECB());
+
+  while (scalar @ptext > $key_size) {
+    my @ptext_block = splice @ptext, 0, $key_size;
+    my $ptext_block = int_array_to_string(@ptext_block);
+    my $ctext_block = $cipher->encrypt($ptext_block);
+    push @ctext, string_to_int_array($ctext_block);
+  }
+
+  my @ptext_block = pkcs_7_pad_block($key_size, @ptext);
+  my $ptext_block = int_array_to_string(@ptext_block);
+  my $ctext_block = $cipher->encrypt($ptext_block);
+  push @ctext, string_to_int_array($ctext_block);
+
+  return @ctext;
 }
 
 # Input: three array references. 1) the key, 2) the initialization vector,
@@ -463,36 +482,27 @@ sub encrypt_aes_128_cbc {
   my @previous_block;
   my @ptext = @{$ptext_ref};
   my @ctext = ();
-  printf {*STDERR} "Size of data is now %d\n", scalar @ptext;
 
   while (my $ptext_length = scalar @ptext) {
     if ($ptext_length < $key_length) {
       @ptext = pkcs_7_pad_block($key_length, @ptext);
     }
-    printf {*STDERR} "After padding, size is now %d\n", scalar @ptext;
 
     # This strips the first $key_length bytes from @ptext, and puts the
     # removed bytes into @ptext_block.
     my @ptext_block = splice @ptext, 0, $key_length;
-    printf {*STDERR} "After splicing, size is now %d\n", scalar @ptext;
 
     my @modified_block;
     if ($block_num == 1) {
-      print {*STDERR} "First block\n";
-      printf {*STDERR} "Sizes: ptb [%d] iv [%d]\n", scalar @ptext_block,
-                       scalar @{$init_vector_ref};
       @modified_block = my_xor(\@ptext_block, $init_vector_ref);
     }
     else {
-      print {*STDERR} "Block $block_num\n";
-      printf {*STDERR} "Sizes: ptb [%d] pv [%d]\n", scalar @ptext_block,
-                       scalar @previous_block;
       @modified_block = my_xor(\@ptext_block, \@previous_block);
     }
     $block_num++;
 
     @previous_block = ();
-    @previous_block = decrypt_aes_128_ecb($key_ref, \@modified_block);
+    @previous_block = encrypt_aes_128_ecb($key_ref, \@modified_block);
     push @ctext, @previous_block;
   }
 
