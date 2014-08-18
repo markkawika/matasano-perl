@@ -6,7 +6,7 @@ use MarksStuff qw( encrypt_aes_128_random_mode hamming_distance );
 
 my @ptext = ();
 for (0 .. 47) {
-  push @ptext, 0;
+  push @ptext, ord('a');
 }
 
 my @ctext = encrypt_aes_128_random_mode(\@ptext);
