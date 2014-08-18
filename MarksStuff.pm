@@ -22,7 +22,6 @@ $VERSION     = v1.00;
                    find_best_xor
                    hamming_distance
                    base64_to_int_array
-                   find_best_key_size
                    find_best_key_sizes
                    rkey_xor
                    break_rkey_xor
@@ -345,6 +344,8 @@ sub rkey_xor {
   return @crypttext;
 }
 
+# Input: A list of 8-bit integers, presumably encrypted via AES-ECB.
+# Output: A list of possible key sizes, with the most likely one first.
 sub find_best_key_sizes {
   my @ctext = @_;
   my %keysizes;
@@ -599,6 +600,44 @@ sub encrypt_aes_128_random_mode {
     my @init_vector = generate_random_aes_key();
     return encrypt_aes_128_cbc(\@key, \@init_vector, \@ptext);
   }
+}
+
+# Creating this key as a global, so it will only be assigned *one* consistent
+# key while the library is in use. Thus we can repeatedly call s2c12_encrypt()
+# from another piece of code, and every time the same key will be used to
+# encrypt the plaintext we pass in.
+
+my @s2c12_key = ();
+for (0 .. 15) {
+  push @s2c12_key, int(rand(256));
+}
+
+# Input: A reference to an array containing data that will be encrypted
+# Output: The array, after appending "unknown string" to the plaintext, and
+#         then encryption.
+sub s2c12_encrypt {
+  my ($ptext_ref) = @_;
+  my @ptext = ();
+  my @unknown_string = (
+    'Um9sbGluJyBpbiBteSA1LjAKV2l0aCBteSByYWctdG9wIGRvd24gc28gbXkg',
+    'aGFpciBjYW4gYmxvdwpUaGUgZ2lybGllcyBvbiBzdGFuZGJ5IHdhdmluZyBq',
+    'dXN0IHRvIHNheSBoaQpEaWQgeW91IHN0b3A/IE5vLCBJIGp1c3QgZHJvdmUg',
+    'YnkK'
+  );
+
+  my @unknown_array = base64_to_int_array(join(q{}, @unknown_string));
+  my @prefix = ();
+  my @suffix = ();
+  my $prefix_length = int(rand(6)) + 5;
+  my $suffix_length = int(rand(6)) + 5;
+  for (1 .. $prefix_length) {
+    push @prefix, int(rand(256));
+  }
+  for (1 .. $suffix_length) {
+    push @suffix, int(rand(256));
+  }
+  push @ptext, @prefix, @{$ptext_ref}, @unknown_array, @suffix;
+  return encrypt_aes_128_ecb(\@s2c12_key, \@ptext);
 }
 
 1;
