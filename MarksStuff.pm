@@ -40,6 +40,13 @@ $VERSION     = v1.00;
 
 my $MKS = 40; # Maximum Key Size
 
+sub print_int_array {
+  my @int_array = @_;
+  print {*STDERR} '[ ';
+  print {*STDERR} join(q{ }, @int_array);
+  print {*STDERR} " ]\n";
+}
+
 sub hex_string_to_int_array {
   my ($str) = @_;
   my @retval;
@@ -456,13 +463,15 @@ sub encrypt_aes_128_ecb {
     my @ptext_block = splice @ptext, 0, $key_size;
     my $ptext_block = int_array_to_string(@ptext_block);
     my $ctext_block = $cipher->encrypt($ptext_block);
-    push @ctext, string_to_int_array($ctext_block);
+    my @ctext_block = string_to_int_array($ctext_block);
+    push @ctext, @ctext_block;
   }
 
   my @ptext_block = pkcs_7_pad_block($key_size, @ptext);
   my $ptext_block = int_array_to_string(@ptext_block);
   my $ctext_block = $cipher->encrypt($ptext_block);
-  push @ctext, string_to_int_array($ctext_block);
+  my @ctext_block = string_to_int_array($ctext_block);
+  push @ctext, @ctext_block;
 
   return @ctext;
 }
@@ -584,11 +593,9 @@ sub encrypt_aes_128_random_mode {
   }
   push @ptext, @prefix, @{$ptext_ref}, @suffix;
   if (int(rand(2)) == 0) {
-    print "CHEATING: I chose ECB mode.\n";
     return encrypt_aes_128_ecb(\@key, \@ptext);
   }
   else {
-    print "CHEATING: I chose CBC mode.\n";
     my @init_vector = generate_random_aes_key();
     return encrypt_aes_128_cbc(\@key, \@init_vector, \@ptext);
   }
