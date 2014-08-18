@@ -27,6 +27,7 @@ $VERSION     = v1.00;
                    rkey_xor
                    break_rkey_xor
                    pkcs_7_pad_block
+                   encrypt_aes_128_ecb
                    decrypt_aes_128_ecb
                    encrypt_aes_128_cbc
                    decrypt_aes_128_cbc
