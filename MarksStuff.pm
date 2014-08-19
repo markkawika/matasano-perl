@@ -424,12 +424,28 @@ sub pkcs_7_pad_block {
 
   my @return_block = @bytes;
   my $num_bytes = ($block_size - $bytes_size);
-  if ($num_bytes > 0xff) {
-    croak "Cannot pad more than 255 bytes.";
-  }
 
   push @return_block, ($num_bytes) x $num_bytes;
   return @return_block;
+}
+
+# Input: An array: the final ptext block after decryption.
+# Output: An array with all padding removed. Note that this might be an empty
+#         block.
+sub pkcs_7_unpad_block {
+  my @bytes = @_;
+  my $block_size = scalar @bytes;
+  my $pad_byte = $bytes[-1];
+  if ($pad_byte > $block_size) {
+    return @bytes;
+  }
+  my $bytes_str = int_array_to_string(@bytes);
+  my $pad_chr = chr($pad_byte);
+  if ($bytes_str =~ /${pad_chr}{$pad_byte}$/) {
+    splice @bytes, (-1 * $pad_byte);
+  }
+
+  return @bytes;
 }
 
 # Input: Two array references. 1) the key, 2) the ctext. The arrays are the
@@ -437,23 +453,27 @@ sub pkcs_7_pad_block {
 # Output: An array of 8-bit integers containing the decrypted plaintext.
 sub decrypt_aes_128_ecb {
   my ($key_ref, $ctext_ref) = @_;
-  my $key = int_array_to_string(@{$key_ref});
-  my $cipher = Crypt::Rijndael->new($key, Crypt::Rijndael::MODE_ECB());
+  my $block_size = scalar @{$key_ref};
+  my $key_str = int_array_to_string(@{$key_ref});
+  my $cipher = Crypt::Rijndael->new($key_str, Crypt::Rijndael::MODE_ECB());
 
-  my $ctext = int_array_to_string(@{$ctext_ref});
-  if (length($ctext) % length($key) != 0) {
+  my $ctext_str = int_array_to_string(@{$ctext_ref});
+  if (length($ctext_str) % length($key_str) != 0) {
     croak 'Cipher/Plain text length must be an even multiple of key length.';
   }
-  my $plaintext = $cipher->decrypt($ctext);
+  my $ptext_str = $cipher->decrypt($ctext_str);
+  my @ptext = string_to_int_array($ptext_str);
+  my @final_ptext_block = splice @ptext, (-1 * $block_size);
+  push @ptext, pkcs_7_unpad_block(@final_ptext_block);
 
-  return string_to_int_array($plaintext);
+  return @ptext;
 }
 
 # Input: Two array references: 1) the key, 2) the ptext. The arrays are the
 #        normal "array of 8-bit integers".
 # Output: An array of 8-bit integers containing the decrypted plaintext.
 sub encrypt_aes_128_ecb {
-  my ($key_ref, $ptext_ref) = @_;
+  my ($key_ref, $ptext_ref, $final_block) = @_;
 
   my @ptext = @{$ptext_ref};
   my @ctext = ();
@@ -461,7 +481,7 @@ sub encrypt_aes_128_ecb {
   my $key_size = scalar @{$key_ref};
   my $cipher = Crypt::Rijndael->new($key, Crypt::Rijndael::MODE_ECB());
 
-  while (scalar @ptext > $key_size) {
+  while (scalar @ptext >= $key_size) {
     my @ptext_block = splice @ptext, 0, $key_size;
     my $ptext_block = int_array_to_string(@ptext_block);
     my $ctext_block = $cipher->encrypt($ptext_block);
@@ -469,11 +489,13 @@ sub encrypt_aes_128_ecb {
     push @ctext, @ctext_block;
   }
 
-  my @ptext_block = pkcs_7_pad_block($key_size, @ptext);
-  my $ptext_block = int_array_to_string(@ptext_block);
-  my $ctext_block = $cipher->encrypt($ptext_block);
-  my @ctext_block = string_to_int_array($ctext_block);
-  push @ctext, @ctext_block;
+  if ($final_block) {
+    my @ptext_block = pkcs_7_pad_block($key_size, @ptext);
+    my $ptext_block = int_array_to_string(@ptext_block);
+    my $ctext_block = $cipher->encrypt($ptext_block);
+    my @ctext_block = string_to_int_array($ctext_block);
+    push @ctext, @ctext_block;
+  }
 
   return @ctext;
 }
@@ -486,35 +508,42 @@ sub encrypt_aes_128_ecb {
 #        with PKCS#7.
 # Output: the encrypted ciphertext (list of 8-bit integers)
 sub encrypt_aes_128_cbc {
-  my ($key_ref, $init_vector_ref, $ptext_ref) = @_;
+  my ($key_ref, $init_vector_ref, $ptext_ref, $final_block) = @_;
 
   my $key_length = scalar @{$key_ref};
-  my $block_num = 1;
+  my $first_block = 1;
   my @previous_block;
   my @ptext = @{$ptext_ref};
   my @ctext = ();
 
-  while (my $ptext_length = scalar @ptext) {
-    if ($ptext_length < $key_length) {
-      @ptext = pkcs_7_pad_block($key_length, @ptext);
-    }
-
-    # This strips the first $key_length bytes from @ptext, and puts the
-    # removed bytes into @ptext_block.
+  while (scalar @ptext >= $key_length) {
     my @ptext_block = splice @ptext, 0, $key_length;
-
     my @modified_block;
-    if ($block_num == 1) {
+    if ($first_block) {
+      $first_block = 0;
       @modified_block = my_xor(\@ptext_block, $init_vector_ref);
     }
     else {
       @modified_block = my_xor(\@ptext_block, \@previous_block);
     }
-    $block_num++;
 
-    @previous_block = ();
-    @previous_block = encrypt_aes_128_ecb($key_ref, \@modified_block);
+    @previous_block = encrypt_aes_128_ecb($key_ref, \@modified_block, 0);
     push @ctext, @previous_block;
+  }
+
+  if ($final_block) {
+    my @ptext_block = pkcs_7_pad_block($key_length, @ptext);
+    my @modified_block;
+    if ($first_block) {
+      $first_block = 0;
+      @modified_block = my_xor(\@ptext_block, $init_vector_ref);
+    }
+    else {
+      @modified_block = my_xor(\@ptext_block, \@previous_block);
+    }
+    # No need to save the last block in @previous_block, because it won't be
+    # needed.
+    push @ctext, encrypt_aes_128_ecb($key_ref, \@modified_block, 1);
   }
 
   return @ctext;
@@ -595,11 +624,11 @@ sub encrypt_aes_128_random_mode {
   }
   push @ptext, @prefix, @{$ptext_ref}, @suffix;
   if (int(rand(2)) == 0) {
-    return encrypt_aes_128_ecb(\@key, \@ptext);
+    return encrypt_aes_128_ecb(\@key, \@ptext, 1);
   }
   else {
     my @init_vector = generate_random_aes_key();
-    return encrypt_aes_128_cbc(\@key, \@init_vector, \@ptext);
+    return encrypt_aes_128_cbc(\@key, \@init_vector, \@ptext, 1);
   }
 }
 
@@ -609,7 +638,7 @@ sub encrypt_aes_128_random_mode {
 # encrypt the plaintext we pass in.
 
 my @s2c12_key = ();
-my $S2C12_KEYSIZE = 14;
+my $S2C12_KEYSIZE = 32;
 for (0 .. ($S2C12_KEYSIZE-1)) {
   push @s2c12_key, int(rand(256));
 }
@@ -629,7 +658,7 @@ sub s2c12_encrypt {
 
   my @unknown_array = base64_to_int_array(join(q{}, @unknown_string));
   push @ptext, @{$ptext_ref}, @unknown_array;
-  return encrypt_aes_128_ecb(\@s2c12_key, \@ptext);
+  return encrypt_aes_128_ecb(\@s2c12_key, \@ptext, 1);
 }
 
 1;
