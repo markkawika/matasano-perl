@@ -1,0 +1,40 @@
+Discovering block size: Three possibilities:
+
+  1) Random prefix
+  2) Fixed prefix
+  3) No prefix
+
+Start state: Assume random prefix. Encrypt the same text twice. If the ctext
+is the same, no random prefix.
+
+If no random prefix:
+
+> Keep adding A's until you see a repeated block. There's a chance it will
+> appear at 2*BS A's, and it's guaranteed at 3*BS-1 A's. If the repeated block
+> appears at the start, it will appear at exactly 2*BS A's. Once you see a
+> repeated block, you'll know the BS.
+
+If random prefix:
+
+] Keep adding A's until you see a repeated block. That will tell you the BS.
+
+BS=3
+baaaaaa
+baa aaa aba aaa aab aaa aaa baa aaa aba aaa aab aaa aaa baa aaa aba aaa aab
+ ?   X   ?   X   Y   X   X   ?   X   ?   X   Y   X   X   ?   X   ?   X   Y
+
+baaa
+baa aba aab aaa baa aba aab aaa baa aba aab
+ ?   ?   Y   X   ?   ?   Y   X
+ 
+Y is what we want ^^
+
+XXa aaa aaa aab aaa aaa aaa baa aaa aaa aba aaa aaa aab aaa
+ ?   X   X   Y   X   X   X   ?   X   X   ?   X   X   ?   X
+
+Y is again what we want, and it always comes right before 3 X's
+
+BS=4
+aaaa aaaa aaaa b
+aaaa aaaa aaaa baaa aaaa aaaa abaa aaaa aaaa aaba aaaa aaaa aaab aaaa aaaa aaaa baaa
+  X    X    X    ?    X    X    ?    X    X    ?    X    X    Y    X    X    X
