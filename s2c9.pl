@@ -13,3 +13,6 @@ my @bytes = string_to_int_array($input_string);
 
 my @padded_block = pkcs_7_pad_block(20, @bytes);
 printf "padded block is [%s]\n", int_array_to_string(@padded_block);
+
+@padded_block = pkcs_7_pad_block(16, ());
+printf "padded block #2 is [%s]\n", int_array_to_string(@padded_block);
