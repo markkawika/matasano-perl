@@ -31,6 +31,7 @@ $VERSION     = v1.00;
                    encrypt_aes_128_cbc
                    decrypt_aes_128_cbc
                    encrypt_aes_128_random_mode
+                   s2c12_encrypt
                  );
 
 %EXPORT_TAGS = ( DEFAULT => [qw(&hex_string_to_int_array &my_xor)],
@@ -608,7 +609,8 @@ sub encrypt_aes_128_random_mode {
 # encrypt the plaintext we pass in.
 
 my @s2c12_key = ();
-for (0 .. 15) {
+my $S2C12_KEYSIZE = 14;
+for (0 .. ($S2C12_KEYSIZE-1)) {
   push @s2c12_key, int(rand(256));
 }
 
@@ -626,17 +628,7 @@ sub s2c12_encrypt {
   );
 
   my @unknown_array = base64_to_int_array(join(q{}, @unknown_string));
-  my @prefix = ();
-  my @suffix = ();
-  my $prefix_length = int(rand(6)) + 5;
-  my $suffix_length = int(rand(6)) + 5;
-  for (1 .. $prefix_length) {
-    push @prefix, int(rand(256));
-  }
-  for (1 .. $suffix_length) {
-    push @suffix, int(rand(256));
-  }
-  push @ptext, @prefix, @{$ptext_ref}, @unknown_array, @suffix;
+  push @ptext, @{$ptext_ref}, @unknown_array;
   return encrypt_aes_128_ecb(\@s2c12_key, \@ptext);
 }
 
