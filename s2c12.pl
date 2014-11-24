@@ -1,5 +1,6 @@
 #!/usr/bin/perl
 
+use 5.010;
 use strict;
 use warnings;
 use Carp;
@@ -8,9 +9,28 @@ use English qw( -no_match_vars );
 use MarksStuff qw( s2c12_encrypt find_best_key_sizes int_array_to_string );
 
 sub discover_block_size {
-  my @ptext = (ord('A')) x 256;
+  my @ptext = (ord('A')) x 1024;
   my @ctext = s2c12_encrypt(\@ptext);
-  return (find_best_key_sizes(@ctext))[0];
+  for (my $block_size = 4; $block_size < 512; $block_size++) {
+    my @prev_block = @ctext[0 .. ($block_size - 1)];
+    my @curr_block;
+    my $matches = 0;
+    for (my $i = 1; (($i * $block_size) + $block_size) < @ctext; $i++) {
+      my $index = $i * $block_size;
+      @curr_block = @ctext[$index .. ($index + $block_size - 1)];
+      if (@curr_block ~~ @prev_block) {
+        $matches++;
+      }
+      else {
+        $matches = 0;
+      }
+      # Must have four blocks in a row that match to signal success.
+      if ($matches == 4) {
+        return $block_size;
+      }
+      @prev_block = @curr_block;
+    }
+  }
 }
 
 my $block_size = discover_block_size();
@@ -20,7 +40,7 @@ my %dictionary = ();
 my @hidden_message = s2c12_encrypt([]);
 my $max_length = scalar @hidden_message;
 my $hidden_message_length = undef;
-for my $x (1 .. $block_size) {
+for my $x (1 .. $block_size*2) {
   my @ctext = s2c12_encrypt([ (ord('a')) x $x ]);
   if (scalar @ctext > $max_length) {
     $hidden_message_length = $max_length - ($x - 1);
