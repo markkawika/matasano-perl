@@ -42,9 +42,7 @@ my $MKS = 40; # Maximum Key Size
 
 sub print_int_array {
   my @int_array = @_;
-  print {*STDERR} '[ ';
-  print {*STDERR} join(q{ }, @int_array);
-  print {*STDERR} " ]\n";
+  print {*STDERR} '[ ', join(q{ }, @int_array), " ]\n";
 }
 
 sub hex_string_to_int_array {
@@ -64,7 +62,7 @@ sub hex_string_to_int_array {
 sub string_to_int_array {
   my ($input) = @_;
 
-  return map(ord, split(q(), $input));
+  return map(ord, split(q{}, $input));
 }
 
 # Input: A list of 8-bit integers
@@ -72,7 +70,7 @@ sub string_to_int_array {
 sub int_array_to_string {
   my @input = @_;
 
-  return join(q(), map(chr, @input));
+  return join(q{}, map(chr, @input));
 }
 
 my @base64_table = qw( A B C D E F G H I J K L M N O P Q R S T U V W X Y Z
@@ -90,7 +88,7 @@ my %base64_values;
 sub int_array_to_base64 {
   my @arr = @_;
 
-  my $retstr = q();
+  my $retstr = q{};
 
   while (@arr > 0) {
     if (@arr >= 3) {
@@ -121,7 +119,8 @@ sub int_array_to_base64 {
   return $retstr;
 }
 
-# Arguments: two equal-length arrays containing 8-bit integer scalars.
+# Arguments: two references to equal-length arrays containing 8-bit integer
+#            scalars.
 # Returns: An array of 8-bit ints containing the first array xor'ed with
 #          the 2nd.
 sub my_xor {
@@ -138,8 +137,7 @@ sub my_xor {
   for (my $i = 0; $i < $len1; $i++) {
     my $v1 = $aref1->[$i];
     my $v2 = $aref2->[$i];
-    my $r = $v1 ^ $v2;
-    push @retval, $r;
+    push @retval, ($v1 ^ $v2);
   }
 
   return @retval;
@@ -245,22 +243,19 @@ sub find_best_xor {
 
   my $max_score = undef;
   my $best_xor;
-  my $best_message = q();
+  my $best_message = q{};
 
   # Skip XOR 0 -- that's the encrypted text.
   for (my $xor_val = 1; $xor_val < 128; $xor_val++) {
     my @xor_list = ($xor_val) x $input_length;
     my @test_results = my_xor(\@input, \@xor_list);
-    my $ascii_output = q();
+    my $ascii_output = q{};
 
     for my $byte (@test_results) {
       $ascii_output .= sprintf '%c', $byte;
     }
-    #printf {*STDERR} "key [%d] str [%s]\n", $xor_val, $ascii_output;
     my $score = english_score(@test_results);
     if (defined $score && (! defined $max_score || $score > $max_score)) {
-      #printf "New record: Xor [%d] Score [%.04f] Message [%s]\n",
-      #       $xor_val, $score, $ascii_output;
       $max_score = $score;
       $best_message = $ascii_output;
       $best_xor = $xor_val;
@@ -309,7 +304,7 @@ sub base64_to_int_array {
   my $j = 0;
   my @retval = ();
   while ($i < length($base64_string)) {
-    my @b64 = split(q(), substr($base64_string, $i, 4));
+    my @b64 = split(q{}, substr($base64_string, $i, 4));
 
     $retval[$j]  = $base64_values{$b64[0]} << 2;
     $retval[$j] += $base64_values{$b64[1]} >> 4;
@@ -471,7 +466,7 @@ sub decrypt_aes_128_ecb {
 
 # Input: Two array references: 1) the key, 2) the ptext. The arrays are the
 #        normal "array of 8-bit integers".
-# Output: An array of 8-bit integers containing the decrypted plaintext.
+# Output: An array of 8-bit integers containing the encrypted plaintext.
 sub encrypt_aes_128_ecb {
   my ($key_ref, $ptext_ref, $final_block) = @_;
 
@@ -555,7 +550,7 @@ sub encrypt_aes_128_cbc {
 #          Length of Key == Length of init vector
 #        Specifically, the data can be shorter than the key. Padding is done
 #        with PKCS#7.
-# Output: the encrypted ciphertext (list of 8-bit integers)
+# Output: the decrypted ciphertext (list of 8-bit integers)
 # Note: This just calls encrypt because encryption / decryption are
 #       symmetrical.
 sub decrypt_aes_128_cbc {
