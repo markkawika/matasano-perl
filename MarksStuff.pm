@@ -644,14 +644,14 @@ for (0 .. ($S2C12_KEYSIZE-1)) {
 sub s2c12_encrypt {
   my ($ptext_ref) = @_;
   my @ptext = ();
-  my @unknown_string = (
+  my @unknown_base64_string = (
     'Um9sbGluJyBpbiBteSA1LjAKV2l0aCBteSByYWctdG9wIGRvd24gc28gbXkg',
     'aGFpciBjYW4gYmxvdwpUaGUgZ2lybGllcyBvbiBzdGFuZGJ5IHdhdmluZyBq',
     'dXN0IHRvIHNheSBoaQpEaWQgeW91IHN0b3A/IE5vLCBJIGp1c3QgZHJvdmUg',
     'YnkK'
   );
 
-  my @unknown_array = base64_to_int_array(join(q{}, @unknown_string));
+  my @unknown_array = base64_to_int_array(join(q{}, @unknown_base64_string));
   push @ptext, @{$ptext_ref}, @unknown_array;
   return encrypt_aes_128_ecb(\@s2c12_key, \@ptext, 1);
 }
