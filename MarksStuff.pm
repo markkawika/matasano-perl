@@ -632,7 +632,7 @@ sub encrypt_aes_128_random_mode {
 # from another piece of code, and every time the same key will be used to
 # encrypt the plaintext we pass in.
 
-my $S2C12_KEYSIZE = 16;
+my $S2C12_KEYSIZE = 32;
 my @s2c12_key = map (int(rand(256)), 0 .. ($S2C12_KEYSIZE-1));
 
 # Input: A reference to an array containing data that will be encrypted
