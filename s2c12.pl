@@ -10,26 +10,20 @@ use MarksStuff qw( s2c12_encrypt find_best_key_sizes int_array_to_string );
 
 sub discover_block_size {
   my $MAX_BLOCK_SIZE = 512;
-  my @ptext = (ord('A')) x (($MAX_BLOCK_SIZE * 4) + 1);
-  my @ctext = s2c12_encrypt(\@ptext);
   for (my $block_size = 4; $block_size < $MAX_BLOCK_SIZE; $block_size++) {
-    my @prev_block = @ctext[0 .. ($block_size - 1)];
-    my @curr_block;
+    my @ctext = s2c12_encrypt([ (ord('A')) x ($block_size * 4) ]);
+    my @first_block = @ctext[0 .. ($block_size - 1)];
     my $matches = 0;
     for (my $i = 1; (($i * $block_size) + $block_size) < @ctext; $i++) {
       my $index = $i * $block_size;
-      @curr_block = @ctext[$index .. ($index + $block_size - 1)];
-      if (@curr_block ~~ @prev_block) {
+      my @curr_block = @ctext[$index .. ($index + $block_size - 1)];
+      if (@curr_block ~~ @first_block) {
         $matches++;
       }
-      else {
-        $matches = 0;
-      }
       # Must have four blocks in a row that match to signal success.
-      if ($matches == 4) {
+      if ($matches == 3) {
         return $block_size;
       }
-      @prev_block = @curr_block;
     }
   }
   return -1;
@@ -44,7 +38,10 @@ my %dictionary = ();
 my @hidden_message = s2c12_encrypt([]);
 my $max_length = scalar @hidden_message;
 my $hidden_message_length = undef;
-for my $x (1 .. $block_size) {
+# AES blocksize is 16, but keysize can be up to 32. PKCS#7 padding is done off
+# of key_size, not block_size, so we'll need to test up to 2*block_size
+# iterations.
+for my $x (1 .. ($block_size * 2)) {
   my @ctext = s2c12_encrypt([ (ord('a')) x $x ]);
   if (scalar @ctext > $max_length) {
     $hidden_message_length = $max_length - ($x - 1);
@@ -112,18 +109,27 @@ our $OUTPUT_AUTOFLUSH = 1;
 # ( 97 97 97 97 97 97 97 X )
 # to all of my dictionaries to determine the value of X.
 
+my %char_frequency;
+for (my $i = 0; $i < 256; $i++) {
+  $char_frequency{$i} = 0;
+}
+
 for (my $i = 0; $i < $hidden_message_length; $i++) {
   my %dictionary = ();
-  for (my $x = 0; $x < 256; $x++) {
-    my @ctext = s2c12_encrypt([ @decoder, $x ]);
-    my $boi_str = int_array_to_string(@ctext[$boi_start .. $boi_end]);
-    $dictionary{$boi_str} = $x;
-    # IOW: $dictionary{ctext_of('aaaaaaaA')} == ord('A'),
-    #      $dictionary{ctext_of('aaaaaaaB')} == ord('B'), ...
-  }
   my @ctext = s2c12_encrypt([ @decoder[ 0 .. (($starting_size - $i) - 1) ] ]);
-  my $boi_str = int_array_to_string(@ctext[$boi_start .. $boi_end]);
-  my $decoded_character = $dictionary{$boi_str};
+  my $decoded_character = undef;
+  for my $x (sort { $char_frequency{$a} <=> $char_frequency{$b} } (0 .. 255)) {
+    my $boi_str = int_array_to_string(@ctext[$boi_start .. $boi_end]);
+    my @test_ctext = s2c12_encrypt([ @decoder, $x ]);
+    my $test_str = int_array_to_string(@test_ctext[$boi_start .. $boi_end]);
+    if ($test_str eq $boi_str) {
+      $decoded_character = $x;
+      last;
+    }
+  }
+  if (! defined $decoded_character) {
+    croak 'Unable to decode a character';
+  }
   print chr $decoded_character;
   shift @decoder;
   push @decoder, $decoded_character;
