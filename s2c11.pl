@@ -4,10 +4,7 @@ use strict;
 use warnings;
 use MarksStuff qw( encrypt_aes_128_random_mode hamming_distance );
 
-my @ptext = ();
-for (0 .. 47) {
-  push @ptext, ord('a');
-}
+my @ptext = map(ord('a'), 0 .. 47);
 
 my @ctext = encrypt_aes_128_random_mode(\@ptext);
 
