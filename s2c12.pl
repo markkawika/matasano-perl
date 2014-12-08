@@ -54,9 +54,6 @@ if (! defined($hidden_message_length)) {
   croak 'How can this be possible? Unable to detect message length';
 }
 
-# DEBUG
-print {*STDERR} "block size is [$block_size], HML [$hidden_message_length]\n";
-
 # Integer division is in use -- no FP division.
 my $num_starting_blocks;
 {
@@ -109,20 +106,24 @@ our $OUTPUT_AUTOFLUSH = 1;
 # ( 97 97 97 97 97 97 97 X )
 # to all of my dictionaries to determine the value of X.
 
-my %char_frequency;
-for (my $i = 0; $i < 256; $i++) {
-  $char_frequency{$i} = 0;
+my %freq;
+for my $i (0 .. 255) {
+  $freq{$i} = 0;
+}
+for my $i (ord('a') .. ord('z'), ord('A') .. ord('Z'), ord(q{ })) {
+  $freq{$i} = 1;
 }
 
 for (my $i = 0; $i < $hidden_message_length; $i++) {
   my %dictionary = ();
   my @ctext = s2c12_encrypt([ @decoder[ 0 .. (($starting_size - $i) - 1) ] ]);
   my $decoded_character = undef;
-  for my $x (sort { $char_frequency{$a} <=> $char_frequency{$b} } (0 .. 255)) {
+  for my $x (reverse sort { $freq{$a} <=> $freq{$b} } (0 .. 255)) {
     my $boi_str = int_array_to_string(@ctext[$boi_start .. $boi_end]);
     my @test_ctext = s2c12_encrypt([ @decoder, $x ]);
     my $test_str = int_array_to_string(@test_ctext[$boi_start .. $boi_end]);
     if ($test_str eq $boi_str) {
+      $freq{$x}++;
       $decoded_character = $x;
       last;
     }
@@ -135,5 +136,3 @@ for (my $i = 0; $i < $hidden_message_length; $i++) {
   push @decoder, $decoded_character;
   $decoded_message .= chr($decoded_character);
 }
-
-print "\n";
